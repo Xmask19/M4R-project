@@ -611,8 +611,7 @@ lemma det_fderiv_eq_zero_of_range_subset_orthogonal {E : Type*} [NormedAddCommGr
 /-- If the determinant of `id + s • fderiv g x` is nonzero for all `0 ≤ s < t₀`, then it is
   strictly positive for any `t ∈ [0, t₀)`. -/
 lemma det_pos_of_lt_t0 {E : Type*} [NormedAddCommGroup E] [InnerProductSpace ℝ E] {g : E → E}
-    {t0 : ℝ}
-    (hdet_ne : ∀ s : ℝ, 0 ≤ s → s < t0 → ∀ x ∈ closedBall (0 : E) 1,
+    {t0 : ℝ} (hdet_ne : ∀ s : ℝ, 0 ≤ s → s < t0 → ∀ x ∈ closedBall (0 : E) 1,
       (ContinuousLinearMap.id ℝ E + s • fderiv ℝ g x).det ≠ 0)
     {t : ℝ} (ht0 : 0 ≤ t) (htC : t < t0) {x : E} (hx : x ∈ closedBall (0 : E) 1) :
     0 < (ContinuousLinearMap.id ℝ E + t • fderiv ℝ g x).det := by
