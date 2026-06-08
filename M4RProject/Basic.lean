@@ -646,6 +646,7 @@ lemma I_eq_volume_of_bij {E : Type*} [NormedAddCommGroup E] [InnerProductSpace �
     ∫ x in closedBall (0 : E) 1,
       LinearMap.det (fderiv ℝ (f_t t) x : E →ₗ[ℝ] E) =
     (volume (closedBall (0 : E) 1)).toReal := by
+  -- Change of variables formula.
   have hcov := MeasureTheory.integral_image_eq_integral_abs_det_fderiv_smul volume
     measurableSet_closedBall
     (fun x hx => (hft_strict_fderiv x hx).hasFDerivAt.hasFDerivWithinAt)
@@ -764,10 +765,14 @@ theorem cont_diff_ball_to_sphere_no_fixed [Nontrivial E]
     (f : E → E) (hf_diff : ContDiff ℝ 1 f)
     (hf_maps : ∀ x ∈ closedBall (0 : E) 1, f x ∈ sphere (0 : E) 1)
     (hf_fixed : ∀ x ∈ sphere (0 : E) 1, f x = x) : False := by
-  -- change cont_diff to ContDiffOn closedBall (0 : E) 1
+  -- change cont_diff to ContDiffOn ℝ 1 f (closedBall (0 : E) 1)
+  -- Define `g(x) = f(x) - x` and `f_t(x) = x + t • g(x)`, which interpolates
+  -- between `id` and `f`.
   let g : E → E := fun x => f x - x
   let f_t : ℝ → E → E := fun t x => x + t • g x
+  -- `g` is `C^1`
   have hgcont_diff : ContDiff ℝ 1 g := by fun_prop
+  -- `g` is Lipschitz on the closed ball with a constant `C > 0`.
   have hg_lipschitz : ∃ K : NNReal, LipschitzOnWith K g (closedBall (0 : E) 1) :=
     ContDiffOn.exists_lipschitzOnWith hgcont_diff.contDiffOn (by norm_num) (convex_closedBall 0 1)
     (isCompact_closedBall 0 1)
@@ -775,45 +780,57 @@ theorem cont_diff_ball_to_sphere_no_fixed [Nontrivial E]
   let C : NNReal := max C' 1
   have hC_pos : (0 : ℝ) < ↑C := by simp [C, NNReal.coe_max]
   have hC_lip : LipschitzOnWith C g (closedBall (0 : E) 1) := hC'.weaken (le_max_left _ _)
-  have hfx : ∀ x ∈ closedBall (0 : E) 1, f x ∈ closedBall 0 1 := by
+  -- `f` maps the closed ball into itself as the image lies in the sphere.
+  have hfxin : ∀ x ∈ closedBall (0 : E) 1, f x ∈ closedBall 0 1 := by
     intro x
     rw [mem_closedBall_zero_iff]
     exact fun hx => le_of_eq (hf_maps x (mem_closedBall_zero_iff.mpr hx))
+  -- Fix an orthonormal basis `b` of `E` and let `n = dim(E)`.
+  -- `J(t, x)` is the matrix of `Df_t(x) = id + t • Dg(x)` in this basis.
   let b := stdOrthonormalBasis ℝ E
   let n := (Module.finrank ℝ E)
   let J : ℝ → E → Matrix (Fin n) (Fin n) ℝ := fun t x =>
   (toMatrix b.toBasis b.toBasis) (ContinuousLinearMap.id ℝ E + t • fderiv ℝ g x)
+  -- `M` is an upper bound on the operator norm of `Dg(x)` over the closed ball.
   obtain ⟨M, hM0, hM⟩ := A_bound_of_contDiff hgcont_diff b
+  -- `t0` is chosen small enough for diagonal dominance and injectivity.
   let t0 : ℝ := min (min (1 / ((↑n + 1) * (M + 1))) (1 / C)) 1
   have ht0_pos : 0 < t0 := by
     simp only [t0, lt_min_iff]
     exact ⟨⟨by positivity, by positivity⟩, one_pos⟩
   have ht0_lt_diag : t0 ≤ 1 / ((↑n + 1) * (M + 1)) := (min_le_left _ _).trans (min_le_left _ _)
   have ht0_lt_C : t0 ≤ 1 / (↑C) := (min_le_left _ _).trans (min_le_right _ _)
-  have ht0_lt_one : t0 ≤ 1 := min_le_right _ _
+  -- -- For `t ∈ [0, t0)`, `J(t, x)` is strictly diagonally dominant and so is invertible.
   have hdiag_dom : ∀ t : ℝ, 0 ≤ t → t < t0 → ∀ x ∈ closedBall (0 : E) 1, ∀ k : Fin n,
     ∑ j ∈ Finset.univ.erase k, ‖J t x k j‖ < ‖J t x k k‖ :=
     fun t ht0 htC x hx k =>
     diag_dom_of_lt b J (fun t x => rfl) hM0 hM (rfl) ht0 (htC.trans_le ht0_lt_diag) hx k
+  -- `id + t • Dg(x)` is invertible for `t ∈ [0, t0)`.
   have hft_nonsingular : ∀ t : ℝ, 0 ≤ t → t < t0 → ∀ x ∈ closedBall (0 : E) 1,
       IsUnit (ContinuousLinearMap.id ℝ E + t • fderiv ℝ g x) :=
     fun t ht0 htC x hx => isUnit_of_diag_dom b J (fun t x => rfl) (hdiag_dom t ht0 htC x hx)
+    -- Invertibility implies `id + t • Dg(x)` is surjective on the interior.
   have hft_surj : ∀ t : ℝ, 0 ≤ t → t < t0 → ∀ x ∈ interior (closedBall (0 : E) 1),
       (ContinuousLinearMap.id ℝ E + t • fderiv ℝ g x).range = ⊤ :=
     fun t ht0 htC x hx => range_eq_top_of_isUnit (hft_nonsingular t ht0 htC x (interior_subset hx))
+  -- `f_t` has a strict derivative at each point of the closed ball for `t ∈ [0, t0)`.
   have hft_strict_fderiv : ∀ t : ℝ, 0 ≤ t → t < t0 → ∀ x ∈ closedBall (0 : E) 1,
       HasStrictFDerivAt (f_t t) (ContinuousLinearMap.id ℝ E + t • fderiv ℝ g x) x :=
     fun t ht0 htC x hx => hasStrictFDerivAt_interpolation hgcont_diff t x
+  --Define `G_t` as the image of interior of the closed ball under `f_t`.
   let G_t := fun t => f_t t '' interior (closedBall (0 : E) 1)
+  -- `f_t` maps the interior of the ball into the closed ball.
   have hGt_subset : ∀ t : ℝ, 0 ≤ t → t ≤ 1 →
       f_t t '' interior (closedBall (0 : E) 1) ⊆ closedBall (0 : E) 1 := by
     intro t ht0 ht1 y ⟨x, hx, hxy⟩
     rw [← hxy]
-    exact mapsTo_interpolation hfx ht0 ht1 (interior_subset hx)
+    exact mapsTo_interpolation hfxin ht0 ht1 (interior_subset hx)
+  -- `G_t` is open for `t ∈ [0, t0)`,
   have hGt_open : ∀ t : ℝ, 0 ≤ t → t < t0 → IsOpen (G_t t) :=
     fun t ht0 htC => isOpen_image_interior (fun x hx => hft_strict_fderiv t ht0 htC x hx)
     (fun x hx => hft_surj t ht0 htC x hx)
   have hft_cont : ∀ t : ℝ, Continuous (f_t t) := by fun_prop
+  -- Any point of the closed ball not in `G_t` must lie on the sphere.
   have hboundary_general : ∀ t : ℝ, 0 ≤ t → t < t0 → t < 1 → ∀ e ∈ closedBall (0 : E) 1,
       e ∉ G_t t → ‖e‖ = 1 :=
     fun t ht0 htC ht1 e he_ball he_not => norm_eq_one_of_not_mem_image
@@ -822,6 +839,7 @@ theorem cont_diff_ball_to_sphere_no_fixed [Nontrivial E]
     ((isCompact_closedBall 0 1).image (hft_cont t)).isClosed
     ⟨f_t t 0, 0, mem_interior_iff_mem_nhds.mpr (closedBall_mem_nhds 0 one_pos), rfl⟩ he_ball he_not
     (Set.Subset.refl _)
+  -- `G_t` equals the open ball for `t ∈ [0, t0)`.
   have hGt_eq_interior : ∀ t : ℝ, 0 ≤ t → t < t0 → t < 1 →
       G_t t = interior (closedBall (0 : E) 1) := by
     intro t ht0 htC ht1
@@ -837,15 +855,19 @@ theorem cont_diff_ball_to_sphere_no_fixed [Nontrivial E]
         exact mem_ball_zero_iff.mp hy
       have hy_norm_eq : ‖y‖ = 1 := hboundary_general t ht0 htC ht1 y (interior_subset hy) hy_not_Gt
       linarith
+  -- For `t ∈ [0, t0)`, `f_t` is a bijection onto the closed ball.
   have hft_bij : ∀ t : ℝ, 0 ≤ t → t < t0 → t < 1 → t < 1 / C → Set.BijOn (f_t t)
       (closedBall (0 : E) 1) (closedBall (0 : E) 1) :=
-    fun t ht0 htC ht1 ht1c => bijOn_of_Gt_eq_interior (fun t x => rfl) (fun x => rfl) hfx
+    fun t ht0 htC ht1 ht1c => bijOn_of_Gt_eq_interior (fun t x => rfl) (fun x => rfl) hfxin
     (fun x hx => by simp [f_t, g, hf_fixed x hx]) hC_lip (hGt_eq_interior t ht0 htC ht1)
     ht0 ht1.le ht1c
+  -- -- `I(t)` is the integral of `det(Df_t)` over the closed ball.
   letI : MeasurableSpace E := borel E
   haveI : BorelSpace E := ⟨rfl⟩
   let I : ℝ → ℝ := fun t => ∫ x in closedBall (0 : E) 1,
     LinearMap.det (fderiv ℝ (f_t t) x : E →ₗ[ℝ] E) ∂volume
+  -- For `t ∈ [0, t0)`, `f_t` is a bijection with positive Jacobian, so by change of variables,
+  -- we get the integral of `1` over the closed ball, so `I(t)` equals the volume of the ball.
   have hI_const_interval: ∀ t : ℝ, 0 ≤ t → t < t0 → t < 1 → t < 1 / C →
       I t = (volume (closedBall (0 : E) 1)).toReal := by
     intro t ht0 htC ht1 ht1C
@@ -866,6 +888,10 @@ theorem cont_diff_ball_to_sphere_no_fixed [Nontrivial E]
       fun x hx => det_pos_of_lt_t0 hdet_ne_all ht0 htC hx
     exact I_eq_volume_of_bij (fun x hx => hft_strict_fderiv t ht0 htC x hx)
       (hft_bij t ht0 htC ht1 ht1C) hdet_pos
+  -- For each `x`, `det(Df_t(x))` is a polynomial in `t`.
+  -- Integrating gives this a polynomial `P(t) = I(t)`.
+  -- Since `P(t) = vol(B^n)` for `t ∈ [0, t0)`, it must be identically `vol(B^n)`.
+  -- `I(t)` = `vol(B^n)` for all `t ∈ ℝ`.
   have hI_const_all : ∀ t : ℝ, I t = (volume (closedBall (0 : E) 1)).toReal := by
     let A : E → Matrix (Fin n) (Fin n) ℝ := fun x => toMatrix b.toBasis b.toBasis (fderiv ℝ g x)
     let P_x : E → Polynomial ℝ := fun x =>
@@ -888,6 +914,10 @@ theorem cont_diff_ball_to_sphere_no_fixed [Nontrivial E]
     intro x hx
     rw [show f_t 1 = f from by simp [f_t, g]]
     exact det_fderiv_eq_zero_of_range_subset_orthogonal hf_diff hf_maps hx
+  -- At `t = 1`, `f_t = f` maps the ball into the sphere.
+  -- For any interior point `x`, differentiating `‖f(x)‖^2 = 1` shows `im(Df(x)) ⊆ {f(x)}⊥`,
+  -- so `Df(x)` is not surjective, hence `det(Df(x)) = 0`.
+  -- As this is almost everywhere on the closed ball, `I(1) = 0`.
   have hI1_zero : I 1 = 0 := by
     simp only [I]
     apply MeasureTheory.integral_eq_zero_of_ae
@@ -905,6 +935,7 @@ theorem cont_diff_ball_to_sphere_no_fixed [Nontrivial E]
   have hball_pos : 0 < (volume (closedBall (0 : E) 1)).toReal :=
     ENNReal.toReal_pos (measure_closedBall_pos volume (0 : E) one_pos).ne'
     measure_closedBall_lt_top.ne
+  -- `I(1) = 0` and `I(1) = vol(B^n) > 0`, contradiction.
   linarith [hI1_zero, hI_const_all 1]
 
 /-- On a compact set, any continuous map can be uniformly approximated by a differentiable map. -/
